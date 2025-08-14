@@ -9,7 +9,10 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: 'http://localhost:3000','https://blogit-frontend.vercel.app', credentials: true }));
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://blogit-frontend.vercel.app'],
+  credentials: true
+}));
 
 // Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
