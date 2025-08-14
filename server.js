@@ -8,6 +8,8 @@ const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
+
+// ====== Middleware ======
 app.use(express.json());
 app.use(cors({
   origin: ['http://localhost:3000', 'https://blogit-frontend.vercel.app'],
@@ -17,11 +19,18 @@ app.use(cors({
 // Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// MongoDB connection
+// ====== MongoDB Connection ======
 mongoose
-  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.log(err));
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 10000 // avoid hanging forever
+  })
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch((err) => {
+    console.error('❌ MongoDB connection error:', err.message);
+    process.exit(1); // stop app if DB can't connect
+  });
 
 // ====== Multer (image upload) ======
 const storage = multer.diskStorage({
@@ -77,9 +86,9 @@ function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'No token provided' });
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { id, username }
+    req.user = decoded;
     next();
-  } catch (e) {
+  } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
@@ -127,7 +136,6 @@ app.get('/auth/me', requireAuth, async (req, res) => {
 });
 
 // ====== Post Routes ======
-// Create (protected, with optional image)
 app.post('/posts', requireAuth, upload.single('image'), async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -143,20 +151,17 @@ app.post('/posts', requireAuth, upload.single('image'), async (req, res) => {
   }
 });
 
-// Read all (public)
 app.get('/posts', async (req, res) => {
   const posts = await Post.find().sort({ createdAt: -1 }).populate('author', 'username email');
   res.json(posts);
 });
 
-// Read one (public)
 app.get('/posts/:id', async (req, res) => {
   const post = await Post.findById(req.params.id).populate('author', 'username email');
   if (!post) return res.status(404).json({ error: 'Not found' });
   res.json(post);
 });
 
-// Update (protected, only owner)
 app.put('/posts/:id', requireAuth, upload.single('image'), async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -177,7 +182,6 @@ app.put('/posts/:id', requireAuth, upload.single('image'), async (req, res) => {
   }
 });
 
-// Delete (protected, only owner)
 app.delete('/posts/:id', requireAuth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -192,5 +196,6 @@ app.delete('/posts/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Start server
-app.listen(5000, () => console.log('Server running on port 5000'));
+// ====== Start Server ======
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
