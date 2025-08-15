@@ -12,7 +12,7 @@ const app = express();
 // ====== Middleware ======
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://blogit-frontend.vercel.app'],
+  origin:  'https://blogit-frontend.vercel.app',
   credentials: true
 }));
 
@@ -26,9 +26,9 @@ mongoose
     useUnifiedTopology: true,
     serverSelectionTimeoutMS: 10000 // avoid hanging forever
   })
-  .then(() => console.log('✅ MongoDB connected'))
+  .then(() => console.log('MongoDB connected'))
   .catch((err) => {
-    console.error('❌ MongoDB connection error:', err.message);
+    console.error('MongoDB connection error:', err.message);
     process.exit(1); // stop app if DB can't connect
   });
 
