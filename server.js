@@ -10,8 +10,6 @@ require('dotenv').config();
 const app = express();
 
 // ====== Middleware ======
-const cors = require("cors");
-
 app.use(cors({
   origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
   credentials: true
