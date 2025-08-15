@@ -1,10 +1,11 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const cloudinary = require('./config/cloudinary'); // Cloudinary config
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 require('dotenv').config();
 
 const app = express();
@@ -17,11 +18,8 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(express.json()); // parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // parse URL-encoded form data
-
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ====== MongoDB Connection ======
 mongoose.connect(process.env.MONGO_URI, {
@@ -35,24 +33,17 @@ mongoose.connect(process.env.MONGO_URI, {
   process.exit(1);
 });
 
-// ====== Multer (image upload) ======
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const base = path.basename(file.originalname, ext).replace(/\s+/g, '-');
-    cb(null, `${Date.now()}-${base}${ext}`);
+// ====== Cloudinary Storage for Multer ======
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'blogit',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    public_id: (req, file) => `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`
   }
 });
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) cb(null, true);
-  else cb(new Error('Only image files are allowed!'));
-};
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }
-});
+
+const upload = multer({ storage });
 
 // ====== Models ======
 const userSchema = new mongoose.Schema({
@@ -88,16 +79,11 @@ function requireAuth(req, res, next) {
 // ====== Auth Routes ======
 app.post('/auth/signup', async (req, res) => {
   try {
-    console.log("📩 Signup body:", req.body); // debug
     const { username, email, password } = req.body;
-    if (!username || !email || !password) {
-      return res.status(400).json({ error: 'All fields required' });
-    }
+    if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
 
     const exists = await User.findOne({ $or: [{ email }, { username }] });
-    if (exists) {
-      return res.status(409).json({ error: 'User with email/username already exists' });
-    }
+    if (exists) return res.status(409).json({ error: 'User with email/username already exists' });
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({ username, email, passwordHash });
@@ -112,11 +98,8 @@ app.post('/auth/signup', async (req, res) => {
 
 app.post('/auth/login', async (req, res) => {
   try {
-    console.log("📩 Login body:", req.body); // debug
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'All fields required' });
-    }
+    if (!email || !password) return res.status(400).json({ error: 'All fields required' });
 
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
@@ -143,7 +126,7 @@ app.post('/posts', requireAuth, upload.single('image'), async (req, res) => {
     const { title, content } = req.body;
     if (!title || !content) return res.status(400).json({ error: 'Title and content required' });
 
-    const imageUrl = req.file ? `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}` : undefined;
+    const imageUrl = req.file ? req.file.path : undefined;
     const post = await Post.create({ title, content, imageUrl, author: req.user.id });
     const populated = await post.populate('author', 'username email');
     res.json(populated);
@@ -173,7 +156,7 @@ app.put('/posts/:id', requireAuth, upload.single('image'), async (req, res) => {
     const { title, content } = req.body;
     if (title !== undefined) post.title = title;
     if (content !== undefined) post.content = content;
-    if (req.file) post.imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    if (req.file) post.imageUrl = req.file.path;
 
     await post.save();
     const populated = await post.populate('author', 'username email');
