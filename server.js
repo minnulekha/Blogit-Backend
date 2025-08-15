@@ -14,7 +14,8 @@ app.use(cors({
   origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
   credentials: true
 }));
-
+app.use(express.json()); // <-- Add this line for JSON body parsing
+app.use(express.urlencoded({ extended: true })); // optional, for form data
 // Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
