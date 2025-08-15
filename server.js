@@ -13,7 +13,7 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:3000",
-    "https://your-frontend.vercel.app"
+    "https://blogit-frontend-minnulekha-minnulekhas-projects.vercel.app"
   ],
   credentials: true
 }));
