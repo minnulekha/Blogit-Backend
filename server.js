@@ -11,72 +11,63 @@ const app = express();
 
 // ====== Middleware ======
 app.use(cors({
-  origin: ["http://localhost:3000", "https://your-frontend.vercel.app"],
+  origin: [
+    "http://localhost:3000",
+    "https://your-frontend.vercel.app"
+  ],
   credentials: true
 }));
-app.use(express.json()); // <-- Add this line for JSON body parsing
-app.use(express.urlencoded({ extended: true })); // optional, for form data
+app.use(express.json()); // parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // parse URL-encoded form data
+
 // Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ====== MongoDB Connection ======
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 10000 // avoid hanging forever
-  })
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
-    process.exit(1); // stop app if DB can't connect
-  });
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 10000
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err.message);
+  process.exit(1);
+});
 
 // ====== Multer (image upload) ======
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, 'uploads'));
-  },
-  filename: function (req, file, cb) {
+  destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
+  filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     const base = path.basename(file.originalname, ext).replace(/\s+/g, '-');
     cb(null, `${Date.now()}-${base}${ext}`);
-  },
+  }
 });
-
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) cb(null, true);
   else cb(new Error('Only image files are allowed!'));
 };
-
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
 // ====== Models ======
-const userSchema = new mongoose.Schema(
-  {
-    username: { type: String, required: true, unique: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
-    passwordHash: { type: String, required: true },
-  },
-  { timestamps: true }
-);
-
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true, trim: true },
+  email: { type: String, required: true, unique: true, lowercase: true },
+  passwordHash: { type: String, required: true }
+}, { timestamps: true });
 const User = mongoose.model('User', userSchema);
 
-const postSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true },
-    content: { type: String, required: true },
-    imageUrl: { type: String },
-    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  },
-  { timestamps: true }
-);
-
+const postSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  content: { type: String, required: true },
+  imageUrl: { type: String },
+  author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+}, { timestamps: true });
 const Post = mongoose.model('Post', postSchema);
 
 // ====== Auth Middleware ======
@@ -84,6 +75,7 @@ function requireAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided' });
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
@@ -96,11 +88,16 @@ function requireAuth(req, res, next) {
 // ====== Auth Routes ======
 app.post('/auth/signup', async (req, res) => {
   try {
+    console.log("📩 Signup body:", req.body); // debug
     const { username, email, password } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'All fields required' });
+    }
 
     const exists = await User.findOne({ $or: [{ email }, { username }] });
-    if (exists) return res.status(409).json({ error: 'User with email/username already exists' });
+    if (exists) {
+      return res.status(409).json({ error: 'User with email/username already exists' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({ username, email, passwordHash });
@@ -108,14 +105,19 @@ app.post('/auth/signup', async (req, res) => {
     const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, username: user.username, email: user.email } });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Signup error:", err);
     res.status(500).json({ error: 'Signup failed' });
   }
 });
 
 app.post('/auth/login', async (req, res) => {
   try {
+    console.log("📩 Login body:", req.body); // debug
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'All fields required' });
+    }
+
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
 
@@ -125,7 +127,7 @@ app.post('/auth/login', async (req, res) => {
     const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, username: user.username, email: user.email } });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Login error:", err);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -146,7 +148,7 @@ app.post('/posts', requireAuth, upload.single('image'), async (req, res) => {
     const populated = await post.populate('author', 'username email');
     res.json(populated);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Post create error:", err);
     res.status(500).json({ error: 'Create failed' });
   }
 });
@@ -177,7 +179,7 @@ app.put('/posts/:id', requireAuth, upload.single('image'), async (req, res) => {
     const populated = await post.populate('author', 'username email');
     res.json(populated);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Post update error:", err);
     res.status(500).json({ error: 'Update failed' });
   }
 });
@@ -191,7 +193,7 @@ app.delete('/posts/:id', requireAuth, async (req, res) => {
     await Post.findByIdAndDelete(req.params.id);
     res.json({ message: 'Post deleted' });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Post delete error:", err);
     res.status(500).json({ error: 'Delete failed' });
   }
 });
